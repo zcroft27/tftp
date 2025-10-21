@@ -1,3 +1,5 @@
+https://datatracker.ietf.org/doc/html/rfc1350
+
 # Protocol flow
 1. Request to read/write a file, also serving as a request for connection.  
 2. If granted, the connection is opened and the file is sent in fixed length blocks of 512 bytes.  
