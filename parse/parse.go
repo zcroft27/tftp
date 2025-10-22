@@ -17,8 +17,8 @@ func Parse(data []byte) (Packet, error) {
 	opcode := OpCode(binary.BigEndian.Uint16(data[0:2]))
 
 	parsers := map[OpCode]func([]byte) (Packet, error){
-		RRQ:   parseReadRequest,
-		WRQ:   parseWriteRequest,
+		RRQ:   parseReadWriteRequest,
+		WRQ:   parseReadWriteRequest,
 		ACK:   parseAckRequest,
 		DATA:  parseDataRequest,
 		ERROR: parseErrorRequest,
@@ -37,7 +37,7 @@ func Parse(data []byte) (Packet, error) {
 	return packet, nil
 }
 
-func parseReadRequest(data []byte) (Packet, error) {
+func parseReadWriteRequest(data []byte) (Packet, error) {
 	if len(data) < 4 {
 		return nil, errors.New("RRQ packet is missing opcode and/or required delimiters")
 	}
@@ -83,10 +83,6 @@ func parseReadRequest(data []byte) (Packet, error) {
 	packet.Mode = mode
 
 	return packet, nil
-}
-
-func parseWriteRequest(data []byte) (Packet, error) {
-	return nil, errors.New("unimplemented")
 }
 
 func parseAckRequest(data []byte) (Packet, error) {
