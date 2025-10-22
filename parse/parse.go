@@ -115,5 +115,29 @@ func parseDataRequest(data []byte) (Packet, error) {
 }
 
 func parseErrorRequest(data []byte) (Packet, error) {
-	return nil, errors.New("unimplemented")
+	if len(data) < 5 {
+		return nil, errors.New("ERROR packet is missing opcode and/or required ErrMsg")
+	}
+
+	restPastOpcode := data[2:]
+
+	errorCode := binary.BigEndian.Uint16(restPastOpcode[:2])
+
+	var errorMsgBytes []byte
+	endErrorMsgIdx := -1 // the zero delimiter idx after a string.
+	for idx, by := range restPastOpcode[2:] {
+		if by == 0x0 {
+			endErrorMsgIdx = idx
+			break
+		}
+		errorMsgBytes = append(errorMsgBytes, by)
+	}
+
+	if endErrorMsgIdx == -1 {
+		return nil, errors.New("missing zero byte after error message")
+	}
+
+	errorMsg := string(errorMsgBytes)
+
+	return Error{ErrorCode: errorCode, ErrorMsg: errorMsg}, nil
 }

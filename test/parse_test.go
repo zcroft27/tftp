@@ -96,3 +96,45 @@ func TestAckRequest(t *testing.T) {
 	}
 	assert.Equal(t, expectedPacket, packet)
 }
+
+func TestErrorMessage(t *testing.T) {
+	opCode := tftp.ERROR
+	opCodeBuffer := make([]byte, 2)
+	binary.BigEndian.PutUint16(opCodeBuffer, uint16(opCode))
+
+	// Test various error codes
+	testCases := []struct {
+		errorCode uint16
+		errorMsg  string
+	}{
+		{0, "Not defined"},
+		{1, "File not found"},
+		{2, "Access violation"},
+		{3, "Disk full or allocation exceeded"},
+		{4, "Illegal TFTP operation"},
+		{5, "Unknown transfer ID"},
+		{6, "File already exists"},
+		{7, "No such user"},
+	}
+
+	for _, tc := range testCases {
+		errorCodeBuffer := make([]byte, 2)
+		binary.BigEndian.PutUint16(errorCodeBuffer, tc.errorCode)
+		assert.Equal(t, tc.errorCode, binary.BigEndian.Uint16(errorCodeBuffer))
+
+		errorMsgBytes := []byte(tc.errorMsg)
+
+		var errorRequest []byte
+		errorRequest = append(errorRequest, opCodeBuffer...)
+		errorRequest = append(errorRequest, errorCodeBuffer...)
+		errorRequest = append(errorRequest, errorMsgBytes...)
+		errorRequest = append(errorRequest, 0x00)
+
+		expectedPacket := tftp.Error{ErrorCode: tc.errorCode, ErrorMsg: tc.errorMsg}
+		packet, err := tftp.Parse(errorRequest)
+		if err != nil {
+			t.Errorf("Failed to parse error packet with code %d: %v", tc.errorCode, err)
+		}
+		assert.Equal(t, expectedPacket, packet)
+	}
+}
