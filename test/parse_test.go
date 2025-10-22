@@ -61,7 +61,7 @@ func TestWriteRequest(t *testing.T) {
 		readRequest = append(readRequest, modeBytes...)
 		readRequest = append(readRequest, 0x00)
 
-		expectedPacket := tftp.ReadRequest{Filename: filename, Mode: mode}
+		expectedPacket := tftp.WriteRequest{Filename: filename, Mode: mode}
 		packet, err := tftp.Parse(readRequest)
 		if err != nil {
 			t.Error()

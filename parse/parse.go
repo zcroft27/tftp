@@ -17,8 +17,8 @@ func Parse(data []byte) (Packet, error) {
 	opcode := OpCode(binary.BigEndian.Uint16(data[0:2]))
 
 	parsers := map[OpCode]func([]byte) (Packet, error){
-		RRQ:   parseReadWriteRequest,
-		WRQ:   parseReadWriteRequest,
+		RRQ:   parseReadRequest,
+		WRQ:   parseWriteRequest,
 		ACK:   parseAckRequest,
 		DATA:  parseDataRequest,
 		ERROR: parseErrorRequest,
@@ -37,14 +37,23 @@ func Parse(data []byte) (Packet, error) {
 	return packet, nil
 }
 
-func parseReadWriteRequest(data []byte) (Packet, error) {
+func parseReadRequest(data []byte) (Packet, error) {
+	isRRQ := true
+	return parseReadWriteRequest(data, isRRQ)
+}
+
+func parseWriteRequest(data []byte) (Packet, error) {
+	isRRQ := false
+	return parseReadWriteRequest(data, isRRQ)
+}
+
+func parseReadWriteRequest(data []byte, isRRQ bool) (Packet, error) {
 	if len(data) < 4 {
-		return nil, errors.New("RRQ packet is missing opcode and/or required delimiters")
+		return nil, errors.New("WRQ/RRQ packet is missing opcode and/or required delimiters")
 	}
 
 	restPastOpcode := data[2:]
 
-	var packet ReadRequest
 	var filenameBytes []byte
 	endFilenameIdx := -1 // the zero delimiter idx after a string.
 	for idx, by := range restPastOpcode {
@@ -60,7 +69,6 @@ func parseReadWriteRequest(data []byte) (Packet, error) {
 	}
 
 	filename := string(filenameBytes)
-	packet.Filename = filename
 
 	var modeBytes []byte
 	endModeIdx := -1 // the zero delimiter idx after a string.
@@ -80,12 +88,23 @@ func parseReadWriteRequest(data []byte) (Packet, error) {
 	if _, exists := VALID_MODES[mode]; !exists {
 		return nil, errors.New("invalid mode, must be one of: netascii, octet, or mail")
 	}
-	packet.Mode = mode
 
-	return packet, nil
+	if isRRQ {
+		return ReadRequest{Filename: filename, Mode: mode}, nil
+	} else {
+		return WriteRequest{Filename: filename, Mode: mode}, nil
+	}
 }
 
 func parseAckRequest(data []byte) (Packet, error) {
+	// if len(data) < 4 {
+	// 	return nil, errors.New("ACK packet is missing opcode and/or required block number")
+	// }
+	// restPastOpcode := data[2:]
+
+	// var packet Ack
+	// blockNumber := binary.BigEndian.Uint16(restPastOpcode[:2])
+
 	return nil, errors.New("unimplemented")
 }
 
