@@ -11,9 +11,11 @@ import (
 )
 
 const (
-	RRQ_UINT16 = uint16(1)
-	WRQ_UINT16 = uint16(2)
-	ACK_UINT16 = uint16(4)
+	RRQ_UINT16   = uint16(1)
+	WRQ_UINT16   = uint16(2)
+	DATA_UINT16  = uint16(3)
+	ACK_UINT16   = uint16(4)
+	ERROR_UINT16 = uint16(5)
 )
 
 func TestReadRequest(t *testing.T) {
@@ -74,7 +76,7 @@ func TestWriteRequest(t *testing.T) {
 	}
 }
 
-func TestAckRequest(t *testing.T) {
+func TestAckMessage(t *testing.T) {
 	opCode := tftp.ACK
 	opCodeBuffer := make([]byte, 2)
 	binary.BigEndian.PutUint16(opCodeBuffer, uint16(opCode))
@@ -85,12 +87,12 @@ func TestAckRequest(t *testing.T) {
 	binary.BigEndian.PutUint16(blockNumberBuffer, uint16(blockNumber))
 	assert.Equal(t, blockNumber, binary.BigEndian.Uint16(blockNumberBuffer))
 
-	var ackRequest []byte
-	ackRequest = append(ackRequest, opCodeBuffer...)
-	ackRequest = append(ackRequest, blockNumberBuffer...)
+	var ackMessage []byte
+	ackMessage = append(ackMessage, opCodeBuffer...)
+	ackMessage = append(ackMessage, blockNumberBuffer...)
 
 	expectedPacket := tftp.Ack{BlockNumber: blockNumber}
-	packet, err := tftp.Parse(ackRequest)
+	packet, err := tftp.Parse(ackMessage)
 	if err != nil {
 		t.Error()
 	}
@@ -101,8 +103,8 @@ func TestErrorMessage(t *testing.T) {
 	opCode := tftp.ERROR
 	opCodeBuffer := make([]byte, 2)
 	binary.BigEndian.PutUint16(opCodeBuffer, uint16(opCode))
+	assert.Equal(t, ERROR_UINT16, binary.BigEndian.Uint16(opCodeBuffer))
 
-	// Test various error codes
 	testCases := []struct {
 		errorCode uint16
 		errorMsg  string
@@ -124,17 +126,43 @@ func TestErrorMessage(t *testing.T) {
 
 		errorMsgBytes := []byte(tc.errorMsg)
 
-		var errorRequest []byte
-		errorRequest = append(errorRequest, opCodeBuffer...)
-		errorRequest = append(errorRequest, errorCodeBuffer...)
-		errorRequest = append(errorRequest, errorMsgBytes...)
-		errorRequest = append(errorRequest, 0x00)
+		var errorMessage []byte
+		errorMessage = append(errorMessage, opCodeBuffer...)
+		errorMessage = append(errorMessage, errorCodeBuffer...)
+		errorMessage = append(errorMessage, errorMsgBytes...)
+		errorMessage = append(errorMessage, 0x00)
 
 		expectedPacket := tftp.Error{ErrorCode: tc.errorCode, ErrorMsg: tc.errorMsg}
-		packet, err := tftp.Parse(errorRequest)
+		packet, err := tftp.Parse(errorMessage)
 		if err != nil {
 			t.Errorf("Failed to parse error packet with code %d: %v", tc.errorCode, err)
 		}
 		assert.Equal(t, expectedPacket, packet)
 	}
+}
+
+func TestDataRequest(t *testing.T) {
+	opCode := tftp.DATA
+	opCodeBuffer := make([]byte, 2)
+	binary.BigEndian.PutUint16(opCodeBuffer, uint16(opCode))
+	assert.Equal(t, DATA_UINT16, binary.BigEndian.Uint16(opCodeBuffer))
+
+	blockNumber := uint16(rand.Intn(int(math.Pow(2, 16))))
+	blockNumberBuffer := make([]byte, 2)
+	binary.BigEndian.PutUint16(blockNumberBuffer, uint16(blockNumber))
+	assert.Equal(t, blockNumber, binary.BigEndian.Uint16(blockNumberBuffer))
+
+	data := []byte{0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0}
+
+	var dataMessage []byte
+	dataMessage = append(dataMessage, opCodeBuffer...)
+	dataMessage = append(dataMessage, blockNumberBuffer...)
+	dataMessage = append(dataMessage, data...)
+
+	expectedPacket := tftp.Data{BlockNumber: blockNumber, Data: data}
+	packet, err := tftp.Parse(dataMessage)
+	if err != nil {
+		t.Error()
+	}
+	assert.Equal(t, expectedPacket, packet)
 }

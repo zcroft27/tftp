@@ -111,7 +111,16 @@ func parseAckRequest(data []byte) (Packet, error) {
 }
 
 func parseDataRequest(data []byte) (Packet, error) {
-	return nil, errors.New("unimplemented")
+	if len(data) < 4 {
+		return nil, errors.New("DATA packet is missing opcode and/or required block number")
+	}
+
+	restPastOpcode := data[2:]
+
+	blockNumber := binary.BigEndian.Uint16(restPastOpcode[:2])
+	fileData := restPastOpcode[2:]
+
+	return Data{BlockNumber: blockNumber, Data: fileData}, nil
 }
 
 func parseErrorRequest(data []byte) (Packet, error) {
