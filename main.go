@@ -108,7 +108,47 @@ func Parse(data []byte) (Packet, error) {
 }
 
 func parseReadRequest(data []byte) (Packet, error) {
+	if len(data) < 4 {
+		return nil, errors.New("RRQ packet is missing opcode and/or required delimiters.")
+	}
 
+	var packet ReadRequest
+
+	var filenameBytes []byte
+	endFilenameIdx := -1 // the zero delimiter idx after a string.
+	for idx, by := range data[2:] {
+		if by == 0x0 {
+			endFilenameIdx = idx
+			break
+		}
+		filenameBytes = append(filenameBytes, by)
+	}
+
+	if endFilenameIdx == -1 {
+		return nil, errors.New("missing zero byte after filename")
+	}
+
+	filename := string(filenameBytes)
+	packet.Filename = filename
+
+	var modeBytes []byte
+	endModeIdx := -1 // the zero delimiter idx after a string.
+	for idx, by := range data[endFilenameIdx:] {
+		if by == 0x0 {
+			endModeIdx = idx
+			break
+		}
+		modeBytes = append(modeBytes, by)
+	}
+
+	if endModeIdx == -1 {
+		return nil, errors.New("missing zero byte after mode")
+	}
+
+	mode := string(modeBytes)
+	packet.Mode = mode
+
+	return packet, nil
 }
 
 func parseWriteRequest(data []byte) (Packet, error) {
