@@ -1,6 +1,10 @@
 package tftp
 
-import "fmt"
+import (
+	"encoding/binary"
+	"errors"
+	"fmt"
+)
 
 /*
 The  TFTP header consists of a **2 byte** opcode field which indicates
@@ -76,5 +80,49 @@ func (e Error) OpCode() OpCode { return ERROR }
 // Parse parses raw bytes into a TFTP packet.
 // Chosen to be built on top of UDP, and UDP datagram is 1:1 with TFTP packet.
 func Parse(data []byte) (Packet, error) {
-	return nil, fmt.Errorf("not implemented")
+	if len(data) <= 0 {
+		return nil, errors.New("no data to parse")
+	}
+
+	opcode := OpCode(binary.BigEndian.Uint16(data[0:2]))
+
+	parsers := map[OpCode]func([]byte) (Packet, error){
+		RRQ:   parseReadRequest,
+		WRQ:   parseWriteRequest,
+		ACK:   parseAckRequest,
+		DATA:  parseDataRequest,
+		ERROR: parseErrorRequest,
+	}
+
+	parser, exists := parsers[opcode]
+	if !exists {
+		return nil, errors.New("unrecognized opcode")
+	}
+
+	packet, err := parser(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse data of opcode type: %v", opcode)
+	}
+
+	return packet, errors.New("unimplemented")
+}
+
+func parseReadRequest(data []byte) (Packet, error) {
+
+}
+
+func parseWriteRequest(data []byte) (Packet, error) {
+
+}
+
+func parseAckRequest(data []byte) (Packet, error) {
+
+}
+
+func parseDataRequest(data []byte) (Packet, error) {
+
+}
+
+func parseErrorRequest(data []byte) (Packet, error) {
+
 }
