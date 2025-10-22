@@ -9,28 +9,30 @@ import (
 )
 
 func TestReadRequest(t *testing.T) {
-	filename := "foo.txt"
-	mode := "netascii"
-	filenameBytes := []byte(filename)
-	modeBytes := []byte(mode)
-	opCode := tftp.RRQ
-	buffer := make([]byte, 2)
-	binary.BigEndian.PutUint16(buffer, uint16(opCode))
+	for mode := range tftp.VALID_MODES {
 
-	assert.Equal(t, uint16(1), binary.BigEndian.Uint16(buffer))
+		filename := "foo.txt"
+		filenameBytes := []byte(filename)
+		modeBytes := []byte(mode)
+		opCode := tftp.RRQ
+		buffer := make([]byte, 2)
+		binary.BigEndian.PutUint16(buffer, uint16(opCode))
 
-	readRequest := []byte{}
-	readRequest = append(readRequest, buffer...)
-	readRequest = append(readRequest, filenameBytes...)
-	readRequest = append(readRequest, 0x00)
-	readRequest = append(readRequest, modeBytes...)
-	readRequest = append(readRequest, 0x00)
+		assert.Equal(t, uint16(1), binary.BigEndian.Uint16(buffer))
 
-	expectedPacket := tftp.ReadRequest{Filename: filename, Mode: mode}
-	packet, err := tftp.Parse(readRequest)
-	if err != nil {
-		t.Error()
+		readRequest := []byte{}
+		readRequest = append(readRequest, buffer...)
+		readRequest = append(readRequest, filenameBytes...)
+		readRequest = append(readRequest, 0x00)
+		readRequest = append(readRequest, modeBytes...)
+		readRequest = append(readRequest, 0x00)
+
+		expectedPacket := tftp.ReadRequest{Filename: filename, Mode: mode}
+		packet, err := tftp.Parse(readRequest)
+		if err != nil {
+			t.Error()
+		}
+
+		assert.Equal(t, expectedPacket, packet)
 	}
-
-	assert.Equal(t, expectedPacket, packet)
 }
