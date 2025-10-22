@@ -97,15 +97,17 @@ func parseReadWriteRequest(data []byte, isRRQ bool) (Packet, error) {
 }
 
 func parseAckRequest(data []byte) (Packet, error) {
-	// if len(data) < 4 {
-	// 	return nil, errors.New("ACK packet is missing opcode and/or required block number")
-	// }
-	// restPastOpcode := data[2:]
+	if len(data) < 4 {
+		return nil, errors.New("ACK packet is missing opcode and/or required block number")
+	}
+	restPastOpcode := data[2:]
 
-	// var packet Ack
-	// blockNumber := binary.BigEndian.Uint16(restPastOpcode[:2])
+	var packet Ack
+	blockNumber := binary.BigEndian.Uint16(restPastOpcode[:2])
 
-	return nil, errors.New("unimplemented")
+	packet.BlockNumber = blockNumber
+
+	return packet, nil
 }
 
 func parseDataRequest(data []byte) (Packet, error) {
