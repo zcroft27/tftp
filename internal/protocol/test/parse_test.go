@@ -5,7 +5,7 @@ import (
 	"math"
 	"math/rand"
 	"testing"
-	tftp "tftp/parse"
+	tftp "tftp/internal/protocol/parse"
 
 	"github.com/stretchr/testify/assert"
 )

@@ -4,45 +4,44 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"tftp/internal/client"
 )
 
 func Transfer(hostPath string, remotePath string, hostToRemote bool) {
 
 }
 
-var validModes = map[string]func() error{
-	"put": writeFile,
-	"get": readFile,
-}
+var validModes = map[string]struct{}{"get": {}, "put": {}}
 
 func main() {
 
 	mode := flag.String("mode", "put", "To write (put) to or read (get) a file from remote.")
+	remoteAddress := flag.String("remote-address", "localhost:69", "Remote server address")
 	local := flag.String("host-path", "", "The path on the host to read from or write to.")
 	remote := flag.String("remote-path", "", "The path on remote to read from or write to.")
 
 	flag.Parse()
 
-	err := validateFlags(mode, remote, local)
+	err := validateFlags(mode, remote, remoteAddress, local)
 	if err != nil {
 		log.Fatalf("Error: %v", err)
 	}
 
-	err = validModes[*mode]()
+	cli := client.New(*remoteAddress)
+
+	operations := map[string]func(string, string) error{
+		"get": cli.Get,
+		"put": cli.Put,
+	}
+
+	op := operations[*mode] // Validated safe in validateFlags.
+	err = op(*remote, *local)
 	if err != nil {
-		log.Fatalf("Error: %v", err)
+		log.Fatal(err)
 	}
 }
 
-func writeFile() error {
-	return nil
-}
-
-func readFile() error {
-	return nil
-}
-
-func validateFlags(mode, remote, local *string) error {
+func validateFlags(mode, remote, remoteAddress, local *string) error {
 	if _, ok := validModes[*mode]; !ok {
 		return fmt.Errorf("mode %s is not valid", *mode)
 	}
@@ -53,6 +52,10 @@ func validateFlags(mode, remote, local *string) error {
 
 	if *local == "" {
 		return fmt.Errorf("local path %s must not be empty", *local)
+	}
+
+	if *remoteAddress == "" {
+		return fmt.Errorf("remote address %s must not be empty", *local)
 	}
 
 	return nil
