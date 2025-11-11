@@ -22,7 +22,7 @@ func New(serverAddr string) *Client {
 }
 
 func (c *Client) Get(remote, local string) error {
-	TID := 49152 + rand.IntN(65536-49152) // 49152 is suggested in RFC 6335 as ephemeral ports for dynamic assignment.
+	TID := 49152 + rand.IntN(65536-49152) // [49152, 65535] is suggested in RFC 6335 as ephemeral ports for dynamic assignment.
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -41,34 +41,36 @@ func (c *Client) Get(remote, local string) error {
 }
 
 func get(ctx context.Context, result chan error, serverAddr string, TID int, remotePath, localPath string) {
-	serverUDPAddr, err := net.ResolveUDPAddr("udp", serverAddr)
+	raddr, err := net.ResolveUDPAddr("udp", serverAddr)
 	if err != nil {
-		result <- fmt.Errorf("failed to resolve server address: %w", err)
+		result <- errors.New("failed to resolve remote UDP address")
 		return
 	}
 
-	localAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", TID))
+	localAddr, err := net.ResolveUDPAddr("udp", "localhost:69")
 	if err != nil {
-		result <- fmt.Errorf("failed to resolve local address: %w", err)
+		result <- errors.New("Failed to resolve local UDP address")
 		return
 	}
 
+	// We must use ListenUDP and not DialUDP since DialUDP creates a 'connected'
+	// socket analogous to the connect(2) syscall.
+	// However, TFTP requires 1) send on port 69, and 2) continue on port TID,
+	// but a connected socket is a socket where the remote address is bound to the socket itself.
+	// Therefore, switching ports wouldn't work.
 	conn, err := net.ListenUDP("udp", localAddr)
 	if err != nil {
-		result <- fmt.Errorf("failed to create UDP connection: %w", err)
 		return
 	}
+
 	defer conn.Close()
 
-	message := []byte("Hello TFTP Server!")
+	// doneChan := make(chan error, 1)
 
-	n, err := conn.WriteToUDP(message, serverUDPAddr)
-	if err != nil {
-		result <- fmt.Errorf("failed to send UDP message: %w", err)
-		return
-	}
-
-	fmt.Printf("Sent %d bytes to %s from local port %d\n", n, serverAddr, TID)
+	// buffer := []byte{}
+	// go func() {
+	// 	n, err := io.Copy(conn, buffer)
+	// }()
 
 	deadline, ok := ctx.Deadline()
 	if ok {
