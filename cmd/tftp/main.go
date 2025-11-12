@@ -16,7 +16,7 @@ var validModes = map[string]struct{}{"get": {}, "put": {}}
 func main() {
 
 	mode := flag.String("mode", "put", "To write (put) to or read (get) a file from remote.")
-	remoteAddress := flag.String("remote-address", "localhost:69", "Remote server address")
+	remoteAddress := flag.String("remote-address", "", "Remote server address")
 	local := flag.String("host-path", "", "The path on the host to read from or write to.")
 	remote := flag.String("remote-path", "", "The path on remote to read from or write to.")
 

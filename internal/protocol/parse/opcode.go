@@ -1,5 +1,7 @@
 package tftp
 
+import "encoding/binary"
+
 type OpCode uint16
 
 const (
@@ -44,6 +46,25 @@ type ReadRequest struct {
 
 func (r ReadRequest) OpCode() OpCode { return RRQ }
 
+func (r ReadRequest) ToBinary() []byte {
+	opCode := r.OpCode()
+	buffer := make([]byte, 2)
+	binary.BigEndian.PutUint16(buffer, uint16(opCode))
+
+	filenameBytes := []byte(r.Filename)
+
+	modeBytes := []byte(r.Mode)
+
+	readRequest := []byte{}
+	readRequest = append(readRequest, buffer...)
+	readRequest = append(readRequest, filenameBytes...)
+	readRequest = append(readRequest, 0x00)
+	readRequest = append(readRequest, modeBytes...)
+	readRequest = append(readRequest, 0x00)
+
+	return readRequest
+}
+
 // WriteRequest packet.
 /*
 The mode field contains the
@@ -57,6 +78,25 @@ type WriteRequest struct {
 }
 
 func (w WriteRequest) OpCode() OpCode { return WRQ }
+
+func (r WriteRequest) ToBinary() []byte {
+	opCode := r.OpCode()
+	buffer := make([]byte, 2)
+	binary.BigEndian.PutUint16(buffer, uint16(opCode))
+
+	filenameBytes := []byte(r.Filename)
+
+	modeBytes := []byte(r.Mode)
+
+	readRequest := []byte{}
+	readRequest = append(readRequest, buffer...)
+	readRequest = append(readRequest, filenameBytes...)
+	readRequest = append(readRequest, 0x00)
+	readRequest = append(readRequest, modeBytes...)
+	readRequest = append(readRequest, 0x00)
+
+	return readRequest
+}
 
 // Data packet.
 type Data struct {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"net"
+	protocol "tftp/internal/protocol/parse"
 	"time"
 )
 
@@ -40,17 +41,17 @@ func (c *Client) Get(remote, local string) error {
 	}
 }
 
-func get(ctx context.Context, result chan error, serverAddr string, TID int, remotePath, localPath string) {
+func makeConn(ctx context.Context, result chan error, serverAddr string) (*net.UDPConn, *net.UDPAddr) {
 	raddr, err := net.ResolveUDPAddr("udp", serverAddr)
 	if err != nil {
 		result <- errors.New("failed to resolve remote UDP address")
-		return
+		return nil, nil
 	}
 
-	localAddr, err := net.ResolveUDPAddr("udp", "localhost:69")
+	localAddr, err := net.ResolveUDPAddr("udp", "localhost:12345")
 	if err != nil {
-		result <- errors.New("Failed to resolve local UDP address")
-		return
+		result <- errors.New("failed to resolve local UDP address")
+		return nil, nil
 	}
 
 	// We must use ListenUDP and not DialUDP since DialUDP creates a 'connected'
@@ -60,21 +61,33 @@ func get(ctx context.Context, result chan error, serverAddr string, TID int, rem
 	// Therefore, switching ports wouldn't work.
 	conn, err := net.ListenUDP("udp", localAddr)
 	if err != nil {
-		return
+		result <- err
+		return nil, nil
 	}
 
-	defer conn.Close()
-
-	// doneChan := make(chan error, 1)
-
-	// buffer := []byte{}
-	// go func() {
-	// 	n, err := io.Copy(conn, buffer)
-	// }()
+	// defer connection in caller
 
 	deadline, ok := ctx.Deadline()
 	if ok {
 		conn.SetDeadline(deadline)
+	}
+
+	return conn, raddr
+}
+
+func get(ctx context.Context, result chan error, serverAddr string, TID int, remotePath, localPath string) {
+	conn, raddr := makeConn(ctx, result, serverAddr)
+	if conn == nil || raddr == nil {
+		result <- errors.New("failed to make UDP connection")
+		return
+	}
+	defer conn.Close()
+
+	message := protocol.ReadRequest{Filename: remotePath, Mode: "netascii"}
+	_, err := conn.WriteToUDP(message.ToBinary(), raddr)
+	if err != nil {
+		result <- err
+		return
 	}
 
 	buffer := make([]byte, TFTP_MAX_DATAGRAM_LENGTH)
@@ -93,6 +106,10 @@ func get(ctx context.Context, result chan error, serverAddr string, TID int, rem
 	fmt.Printf("Received %d bytes from %s: %s\n", n, addr, string(buffer[:n]))
 
 	result <- nil
+}
+
+func initiate(c *net.UDPConn) {
+
 }
 
 func (c *Client) Put(local, remote string) error {
