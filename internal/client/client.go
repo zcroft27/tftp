@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand/v2"
 	"net"
 	protocol "tftp/internal/protocol/parse"
+	"tftp/internal/utils"
 	"time"
 )
 
@@ -15,7 +15,7 @@ type Client struct {
 }
 
 const (
-	TFTP_MAX_DATAGRAM_LENGTH = 516
+	TFTP_MAX_DATAGRAM_LENGTH = 512
 )
 
 func New(serverAddr string) *Client {
@@ -23,7 +23,7 @@ func New(serverAddr string) *Client {
 }
 
 func (c *Client) Get(remote, local string) error {
-	TID := 49152 + rand.IntN(65536-49152) // [49152, 65535] is suggested in RFC 6335 as ephemeral ports for dynamic assignment.
+	TID := utils.GenerateTID()
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()

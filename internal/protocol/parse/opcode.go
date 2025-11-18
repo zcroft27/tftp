@@ -106,6 +106,22 @@ type Data struct {
 
 func (d Data) OpCode() OpCode { return DATA }
 
+func (d Data) ToBinary() []byte {
+	opCode := d.OpCode()
+	opCodeBuffer := make([]byte, 2)
+	binary.BigEndian.PutUint16(opCodeBuffer, uint16(opCode))
+
+	blockNumberBuffer := make([]byte, 2)
+	binary.BigEndian.PutUint16(blockNumberBuffer, d.BlockNumber)
+
+	dataPacket := []byte{}
+	dataPacket = append(dataPacket, opCodeBuffer...)
+	dataPacket = append(dataPacket, blockNumberBuffer...)
+	dataPacket = append(dataPacket, d.Data...)
+
+	return dataPacket
+}
+
 // Acknowledgment packet.
 type Ack struct {
 	BlockNumber uint16
