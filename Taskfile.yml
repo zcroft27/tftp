@@ -1,0 +1,12 @@
+version: '3'
+
+tasks:
+  server:
+    desc: Start TFTP server
+    cmds:
+      - go run cmd/tftpd/main.go -port 69 -root ./tftp-root
+
+  get:
+    desc: Client GET request
+    cmds:
+      - go run cmd/tftp/main.go -mode get -remote-address localhost:69 -remote-path test.txt -host-path downloaded.txt

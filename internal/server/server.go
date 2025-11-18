@@ -63,7 +63,7 @@ func handlePacket(ctx context.Context, conn *net.UDPConn, remote *net.UDPAddr, p
 	switch packet.OpCode() {
 	case tftp.RRQ:
 		// Send DATA
-		go sendData(ctx, conn, remote, packet)
+		sendData(ctx, remote)
 	case tftp.WRQ:
 		// SEND ACK
 		// go sendAck(ctx, conn, remote, packet)
@@ -76,7 +76,7 @@ func handlePacket(ctx context.Context, conn *net.UDPConn, remote *net.UDPAddr, p
 	}
 }
 
-func sendData(ctx context.Context, conn *net.UDPConn, remote *net.UDPAddr, packet tftp.Packet) {
+func sendData(ctx context.Context, remote *net.UDPAddr) {
 	TID := utils.GenerateTID()
 	newConn, err := net.ListenUDP("udp", &net.UDPAddr{Port: TID})
 	if err != nil {
@@ -93,6 +93,13 @@ func sendData(ctx context.Context, conn *net.UDPConn, remote *net.UDPAddr, packe
 	timeout := 5 * time.Second
 
 	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("context cancelled: %v", ctx.Err())
+			return
+		default:
+			// Continue with transfer.
+		}
 		end := offset + blockSize
 		if end > len(fileData) {
 			end = len(fileData)
@@ -106,15 +113,15 @@ func sendData(ctx context.Context, conn *net.UDPConn, remote *net.UDPAddr, packe
 		retries := 0
 
 		for retries < maxRetries {
-			_, err := conn.WriteToUDP(dataPacket.ToBinary(), remote)
+			_, err := newConn.WriteToUDP(dataPacket.ToBinary(), remote)
 			if err != nil {
 				log.Printf("failed to write: %v", err)
 				return
 			}
 
 			var buf [client.TFTP_MAX_DATAGRAM_LENGTH]byte
-			conn.SetReadDeadline(time.Now().Add(timeout))
-			n, _, err := conn.ReadFromUDP(buf[:])
+			newConn.SetReadDeadline(time.Now().Add(timeout))
+			n, _, err := newConn.ReadFromUDP(buf[:])
 
 			if err != nil {
 				retries++

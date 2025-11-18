@@ -39,6 +39,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Println("finished with success")
 }
 
 func validateFlags(mode, remote, remoteAddress, local *string) error {

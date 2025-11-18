@@ -129,6 +129,15 @@ type Ack struct {
 
 func (a Ack) OpCode() OpCode { return ACK }
 
+func (a Ack) ToBinary() []byte {
+	ackMessage := make([]byte, 4)
+
+	binary.BigEndian.PutUint16(ackMessage[0:2], uint16(a.OpCode()))
+	binary.BigEndian.PutUint16(ackMessage[2:4], a.BlockNumber)
+
+	return ackMessage
+}
+
 // Error packet.
 type Error struct {
 	ErrorCode uint16
