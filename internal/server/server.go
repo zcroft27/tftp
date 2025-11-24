@@ -60,8 +60,6 @@ func (s *Server) ListenAndServe() error {
 }
 
 func handlePacket(ctx context.Context, remote *net.UDPAddr, packet tftp.Packet, root string) {
-	fmt.Println("received!")
-	fmt.Println(packet.OpCode())
 	switch packet.OpCode() {
 	case tftp.RRQ:
 		rrq, ok := packet.(tftp.ReadRequest)

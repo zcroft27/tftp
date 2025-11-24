@@ -63,7 +63,7 @@ func makeConn(ctx context.Context, result chan error, serverAddr string, request
 		return nil, nil
 	}
 
-	// defer connection in caller
+	// defer connection close in caller.
 
 	deadline, ok := ctx.Deadline()
 	if ok {
@@ -99,7 +99,7 @@ func get(ctx context.Context, result chan error, serverAddr string, requestingTI
 		var dataPacket protocol.Data
 
 		for retries < maxRetries {
-			buffer := make([]byte, TFTP_MAX_DATAGRAM_LENGTH)
+			buffer := make([]byte, 1024)
 			conn.SetReadDeadline(time.Now().Add(timeout))
 			n, addr, err := conn.ReadFromUDP(buffer)
 
@@ -114,6 +114,7 @@ func get(ctx context.Context, result chan error, serverAddr string, requestingTI
 			}
 
 			if serverTIDAddr == nil {
+
 				serverTIDAddr = addr
 			}
 
@@ -145,6 +146,7 @@ func get(ctx context.Context, result chan error, serverAddr string, requestingTI
 				continue
 			}
 
+			// Handle retry if the server didn't receive our last ACK.
 			if data.BlockNumber != expectedBlockNum {
 				if data.BlockNumber == expectedBlockNum-1 {
 					ackPacket := protocol.Ack{BlockNumber: data.BlockNumber}

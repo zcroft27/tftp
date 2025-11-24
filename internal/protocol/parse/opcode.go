@@ -1,6 +1,8 @@
 package tftp
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+)
 
 type OpCode uint16
 
