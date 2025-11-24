@@ -122,6 +122,7 @@ func sendData(ctx context.Context, remote *net.UDPAddr, fileData []byte) {
 		default:
 			// Continue with transfer.
 		}
+
 		end := offset + blockSize
 		if end > len(fileData) {
 			end = len(fileData)

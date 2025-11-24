@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	protocol "tftp/internal/protocol/parse"
 	"tftp/internal/utils"
 	"time"
@@ -166,6 +167,12 @@ func get(ctx context.Context, result chan error, serverAddr string, requestingTI
 
 		fileData = append(fileData, dataPacket.Data...)
 
+		err := os.WriteFile(localPath, fileData, 0644)
+		if err != nil {
+			retries++
+			continue
+		}
+
 		// Send ACK.
 		ackPacket := protocol.Ack{BlockNumber: expectedBlockNum}
 		_, err = conn.WriteToUDP(ackPacket.ToBinary(), serverTIDAddr)
@@ -185,7 +192,7 @@ func get(ctx context.Context, result chan error, serverAddr string, requestingTI
 
 	// TODO: Write fileData to localPath.
 	fmt.Printf("Transfer complete: received %d bytes\n", len(fileData))
-	fmt.Printf("data: %s\n", fileData)
+
 	result <- nil
 }
 
