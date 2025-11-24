@@ -10,3 +10,7 @@ tasks:
     desc: Client GET request
     cmds:
       - go run cmd/tftp/main.go -mode get -remote-address localhost:69 -remote-path test.txt -host-path downloaded.txt
+
+  generate-test-file:
+    cmds:
+      - head -c 209715200 /dev/urandom | base64 > ./cmd/tftpd/tftp-root/test.txt

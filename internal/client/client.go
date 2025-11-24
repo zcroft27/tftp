@@ -9,6 +9,8 @@ import (
 	protocol "tftp/internal/protocol/parse"
 	"tftp/internal/utils"
 	"time"
+
+	humanize "github.com/dustin/go-humanize"
 )
 
 type Client struct {
@@ -26,8 +28,6 @@ func New(serverAddr string) *Client {
 func (c *Client) Get(remote, local string) error {
 	requestingTID := utils.GenerateTID()
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
 	result := make(chan error, 1)
 
 	go get(ctx, result, c.serverAddr, requestingTID, remote, local)
@@ -82,8 +82,15 @@ func get(ctx context.Context, result chan error, serverAddr string, requestingTI
 	}
 	defer conn.Close()
 
+	file, err := os.Create(localPath)
+	if err != nil {
+		result <- err
+		return
+	}
+	defer file.Close()
+
 	message := protocol.ReadRequest{Filename: remotePath, Mode: "netascii"}
-	_, err := conn.WriteToUDP(message.ToBinary(), raddr)
+	_, err = conn.WriteToUDP(message.ToBinary(), raddr)
 	if err != nil {
 		result <- err
 		return
@@ -167,7 +174,11 @@ func get(ctx context.Context, result chan error, serverAddr string, requestingTI
 
 		fileData = append(fileData, dataPacket.Data...)
 
-		err := os.WriteFile(localPath, fileData, 0644)
+		n, err := file.Write(dataPacket.Data)
+		if n != len(dataPacket.Data) {
+			result <- fmt.Errorf("wrote incomplete data into file, aborting")
+			return
+		}
 		if err != nil {
 			retries++
 			continue
@@ -191,7 +202,7 @@ func get(ctx context.Context, result chan error, serverAddr string, requestingTI
 	}
 
 	// TODO: Write fileData to localPath.
-	fmt.Printf("Transfer complete: received %d bytes\n", len(fileData))
+	fmt.Printf("Transfer complete: received %s\n", humanize.Bytes(uint64(len(fileData))))
 
 	result <- nil
 }
