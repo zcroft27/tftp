@@ -26,12 +26,21 @@ brew install task # optional, enables use of Taskfile for manual testing.
 brew install go
 go mod tidy
 ```
-## Operation
+## Simple Operation
 ```bash
 sudo task server > server.log 2>&1 & # sudo since binding to privileged port 69, & to run in the background. CAREFUL: sudo first time will ask for password, use `fg` to enter it. Or, just use a different shell for this.
 task generate-test-file # creates cmd/tftpd/tftp-root/test.txt with ~280 MiB of random ascii data.
 task get # will retrieve the generated data into test.txt.
 task put # will write the generated data into cmd/tftpd/tftp-root/written-to.txt.
+```
+
+## Detailed Operation
+```bash
+go build -o tftpd cmd/tftpd/main.go # build the daemon
+go build -o tftpc cmd/tftp/main.go #  build the client
+./tftpd -port 69 - root <root_path, e.g. ./cmd/tftpd/tftp-root> > server.log 2>&1 &
+./tftpc -mode put -remote-address <remote_address, e.g. localhost:69> -remote-path <remote_path, e.g. written-to.txt> -host-path <host_path, e.g. ./cmd/tftpd/tftp-root/test.txt>
+./tftpc -mode get -remote-address <remote_address, e.g. localhost:69> -remote-path <remote_path, e.g. test.txt> -host-path <host_path, e.g. downloaded.txt>
 ```
 
 ## Cleanup
