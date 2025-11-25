@@ -10,6 +10,11 @@ tasks:
     desc: Client GET request
     cmds:
       - go run cmd/tftp/main.go -mode get -remote-address localhost:69 -remote-path test.txt -host-path downloaded.txt
+  
+  put:
+    desc: Client PUT request
+    cmds:
+      - go run cmd/tftp/main.go -mode put -remote-address localhost:69 -remote-path written-to.txt -host-path ./cmd/tftpd/tftp-root/test.txt
 
   generate-test-file:
     cmds:

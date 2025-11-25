@@ -29,6 +29,8 @@ func main() {
 
 	cli := client.New(*remoteAddress)
 
+	fmt.Println("host: ", *local)
+
 	operations := map[string]func(string, string) error{
 		"get": cli.Get,
 		"put": cli.Put,

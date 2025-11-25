@@ -12,6 +12,8 @@ import (
 	tftp "tftp/internal/protocol/parse"
 	"tftp/internal/utils"
 	"time"
+
+	"github.com/dustin/go-humanize"
 )
 
 type Server struct {
@@ -55,8 +57,6 @@ func (s *Server) ListenAndServe() error {
 		}
 		go handlePacket(ctx, remote, packet, s.root)
 	}
-
-	return nil
 }
 
 func handlePacket(ctx context.Context, remote *net.UDPAddr, packet tftp.Packet, root string) {
@@ -84,10 +84,26 @@ func handlePacket(ctx context.Context, remote *net.UDPAddr, packet tftp.Packet, 
 		}
 
 		// Send DATA
-		sendData(ctx, remote, fileData)
+		handleRRQ(ctx, remote, fileData)
 	case tftp.WRQ:
 		// SEND ACK
-		// go sendAck(ctx, conn, remote, packet)
+		wrq, ok := packet.(protocol.WriteRequest)
+		if !ok {
+			log.Printf("failed to convert packet: %w\n", packet)
+			return
+		}
+		go func() {
+			fullPath := filepath.Join(root, wrq.Filename)
+			file, err := os.Create(fullPath)
+			if err != nil {
+				fmt.Println("err: ", err)
+				log.Printf("failed to open file: %s\n", wrq.Filename)
+				// TODO: send ERROR packet.
+				return
+			}
+			defer file.Close()
+			handleWRQ(ctx, remote, file)
+		}()
 	default:
 		// ACK, DATA, and ERROR
 		// should never be sent to the server listening at port 69.
@@ -97,9 +113,125 @@ func handlePacket(ctx context.Context, remote *net.UDPAddr, packet tftp.Packet, 
 	}
 }
 
-func sendData(ctx context.Context, remote *net.UDPAddr, fileData []byte) {
+func handleWRQ(ctx context.Context, remote *net.UDPAddr, file *os.File) {
+	// TID := utils.GenerateTID()
+	log.Printf("Remote address: %v (IP: %v, Port: %d)", remote, remote.IP, remote.Port)
+
+	newConn, err := net.DialUDP("udp", nil, remote)
+	// newConn, err := net.ListenUDP("udp", &net.UDPAddr{Port: TID})
+	if err != nil {
+		log.Printf("failed to open conn: %v", err)
+		return
+	}
+	defer newConn.Close()
+
+	blockNum := uint16(0)
+	maxRetries := 5
+	timeout := 5 * time.Second
+	var fileData []byte
+	var dataPacket protocol.Data
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("context cancelled: %v", ctx.Err())
+			return
+		default:
+			// Continue with transfer.
+		}
+
+		retries := 0
+		for retries < maxRetries {
+			ackPacket := protocol.Ack{BlockNumber: blockNum}
+			_, err := newConn.Write(ackPacket.ToBinary())
+			if err != nil {
+				retries++
+				continue
+			}
+
+			buffer := make([]byte, 1024)
+			newConn.SetReadDeadline(time.Now().Add(timeout))
+			n, err := newConn.Read(buffer)
+
+			if err != nil {
+				retries++
+				continue
+			}
+
+			packet, err := protocol.Parse(buffer[:n])
+			if err != nil {
+				log.Printf("failed to parse packet: %w", err)
+				return
+			}
+
+			// Check if it's an ERROR packet.
+			if packet.OpCode() == protocol.ERROR {
+				errorPacket, ok := packet.(protocol.Error)
+				if ok {
+					log.Printf("server error %d: %s", errorPacket.ErrorCode, errorPacket.ErrorMsg)
+				} else {
+					log.Println("received error packet from server")
+				}
+				return
+			}
+
+			if packet.OpCode() != protocol.DATA {
+				retries++
+				continue
+			}
+
+			data, ok := packet.(protocol.Data)
+			if !ok {
+				retries++
+				continue
+			}
+
+			expectedDataBlock := blockNum + 1
+
+			// Handle retry if the server didn't receive our last ACK.
+			if data.BlockNumber != expectedDataBlock {
+				if data.BlockNumber == blockNum {
+					ackPacket := protocol.Ack{BlockNumber: data.BlockNumber}
+					newConn.Write(ackPacket.ToBinary())
+				}
+				continue
+			}
+
+			dataPacket = data
+			break
+		}
+
+		if retries >= maxRetries {
+			log.Printf("max retries reached for block %d", blockNum)
+			return
+		}
+
+		fileData = append(fileData, dataPacket.Data...)
+
+		n, err := file.Write(dataPacket.Data)
+		if n != len(dataPacket.Data) {
+			log.Println("wrote incomplete data into file, aborting")
+			return
+		}
+		if err != nil {
+			retries++
+			continue
+		}
+
+		blockNum++
+
+		if n < client.TFTP_MAX_DATAGRAM_LENGTH {
+			fmt.Printf("Transfer complete: received %s\n", humanize.Bytes(uint64(len(fileData))))
+			return
+		}
+
+	}
+}
+
+func handleRRQ(ctx context.Context, remote *net.UDPAddr, fileData []byte) {
 	TID := utils.GenerateTID()
-	newConn, err := net.ListenUDP("udp", &net.UDPAddr{Port: TID})
+	newConn, err := net.DialUDP("udp", &net.UDPAddr{Port: TID}, remote)
+	// newConn, err := net.ListenUDP("udp", &net.UDPAddr{Port: TID})
 	if err != nil {
 		log.Printf("failed to open conn: %v", err)
 		return
@@ -111,8 +243,6 @@ func sendData(ctx context.Context, remote *net.UDPAddr, fileData []byte) {
 	blockSize := client.TFTP_MAX_DATAGRAM_LENGTH
 	maxRetries := 5
 	timeout := 5 * time.Second
-
-	var clientTIDAddr *net.UDPAddr
 
 	for {
 		select {
@@ -136,12 +266,7 @@ func sendData(ctx context.Context, remote *net.UDPAddr, fileData []byte) {
 		retries := 0
 
 		for retries < maxRetries {
-			destAddr := remote
-			if clientTIDAddr != nil {
-				destAddr = clientTIDAddr
-			}
-
-			_, err := newConn.WriteToUDP(dataPacket.ToBinary(), destAddr)
+			_, err := newConn.Write(dataPacket.ToBinary())
 			if err != nil {
 				log.Printf("failed to write: %v", err)
 				return
@@ -149,18 +274,13 @@ func sendData(ctx context.Context, remote *net.UDPAddr, fileData []byte) {
 
 			var buf [client.TFTP_MAX_DATAGRAM_LENGTH]byte
 			newConn.SetReadDeadline(time.Now().Add(timeout))
-			n, addr, err := newConn.ReadFromUDP(buf[:])
+			n, err := newConn.Read(buf[:])
 
 			if err != nil {
 				retries++
 				log.Printf("timeout waiting for ACK block %d (attempt %d/%d)",
 					blockNum, retries, maxRetries)
 				continue
-			}
-
-			if clientTIDAddr == nil {
-				clientTIDAddr = addr
-				log.Printf("Client TID: %s", clientTIDAddr)
 			}
 
 			ackPacket, err := tftp.Parse(buf[:n])

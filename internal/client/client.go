@@ -41,7 +41,7 @@ func (c *Client) Get(remote, local string) error {
 	}
 }
 
-func (c *Client) Put(local, remote string) error {
+func (c *Client) Put(remote, local string) error {
 	requestingTID := utils.GenerateTID()
 	ctx := context.Background()
 	result := make(chan error, 1)
@@ -53,8 +53,6 @@ func (c *Client) Put(local, remote string) error {
 	case <-ctx.Done():
 		return fmt.Errorf("operation timed out: %w", ctx.Err())
 	}
-
-	return nil
 }
 
 func makeConn(ctx context.Context, result chan error, serverAddr string, requestingTID int) (*net.UDPConn, *net.UDPAddr) {
@@ -99,138 +97,122 @@ func put(ctx context.Context, result chan error, serverAddr string, requestingTI
 	}
 	defer conn.Close()
 
-	expectedBlockNum := uint16(1)
-
-	// Wait for special-case ACK with block-number 0.
+	file, err := os.Open(localPath)
+	if err != nil {
+		result <- err
+		return
+	}
+	defer file.Close()
 
 	maxRetries := 5
 	timeout := 5 * time.Second
 	var serverTIDAddr *net.UDPAddr
-	var prevWrq protocol.WriteRequest
-	var prevData protocol.Data
-	isFirstRequest := true
-	offset := int64(0)
 
-	for {
-		retries := 0
-		buf := make([]byte, TFTP_MAX_DATAGRAM_LENGTH)
-		file, err := os.Open(localPath)
+	wrq := protocol.WriteRequest{Filename: remotePath, Mode: "netascii"}
+
+	for retries := 0; retries < maxRetries; retries++ {
+		_, err := conn.WriteToUDP(wrq.ToBinary(), raddr)
+		if err != nil {
+			continue
+		}
+
+		buffer := make([]byte, TFTP_MAX_DATAGRAM_LENGTH)
+		conn.SetReadDeadline(time.Now().Add(timeout))
+		n, addr, err := conn.ReadFromUDP(buffer)
+		if err != nil {
+			continue
+		}
+
+		packet, err := protocol.Parse(buffer[:n])
 		if err != nil {
 			result <- err
 			return
 		}
 
-		defer file.Close()
-		n, err := file.ReadAt(buf, offset)
-		if err != nil {
-			if err != io.EOF {
-				result <- err
-				return
-			}
+		if packet.OpCode() == protocol.ERROR {
+			errorPacket, _ := packet.(protocol.Error)
+			result <- fmt.Errorf("server error %d: %s", errorPacket.ErrorCode, errorPacket.ErrorMsg)
+			return
 		}
 
-		for retries < maxRetries {
-			if isFirstRequest {
-				// Send the WRQ.
-				wrq := protocol.WriteRequest{Filename: remotePath, Mode: "netascii"}
-				_, err := conn.WriteToUDP(wrq.ToBinary(), raddr)
-				if err != nil {
-					retries++
-					continue
-				}
-				prevWrq = wrq
-			} else {
-				// Business as usual.
-				packet := protocol.Data{BlockNumber: expectedBlockNum, Data: buf[:n]}
-				_, err := conn.WriteToUDP(packet.ToBinary(), serverTIDAddr)
-				if err != nil {
-					retries++
-					continue
-				}
-			}
+		if packet.OpCode() != protocol.ACK {
+			continue
+		}
 
-			// Wait for ACK.
-			buffer := make([]byte, TFTP_MAX_DATAGRAM_LENGTH)
-			conn.SetReadDeadline(time.Now().Add(timeout))
-			n, addr, err := conn.ReadFromUDP(buffer)
+		ack, ok := packet.(protocol.Ack)
+		if !ok || ack.BlockNumber != 0 {
+			continue
+		}
 
+		serverTIDAddr = addr
+		break
+	}
+
+	if serverTIDAddr == nil {
+		result <- errors.New("failed to receive ACK 0 from server")
+		return
+	}
+
+	blockNum := uint16(1)
+	offset := int64(0)
+
+	for {
+		buf := make([]byte, TFTP_MAX_DATAGRAM_LENGTH)
+		n, err := file.ReadAt(buf, offset)
+		if err != nil && err != io.EOF {
+			result <- err
+			return
+		}
+
+		dataPacket := protocol.Data{BlockNumber: blockNum, Data: buf[:n]}
+
+		// Send DATA with retries
+		for retries := 0; retries < maxRetries; retries++ {
+			_, err := conn.WriteToUDP(dataPacket.ToBinary(), serverTIDAddr)
 			if err != nil {
-				retries++
-				// If we've already received ACK, resend the last DATA.
-				if expectedBlockNum > 1 {
-					conn.WriteToUDP(prevData.ToBinary(), serverTIDAddr)
-				}
 				continue
 			}
 
-			packet, err := protocol.Parse(buffer[:n])
+			buffer := make([]byte, TFTP_MAX_DATAGRAM_LENGTH)
+			conn.SetReadDeadline(time.Now().Add(timeout))
+			ackN, _, err := conn.ReadFromUDP(buffer)
 			if err != nil {
-				result <- fmt.Errorf("failed to parse packet: %w", err)
+				continue
+			}
+
+			packet, err := protocol.Parse(buffer[:ackN])
+			if err != nil {
+				result <- err
 				return
 			}
 
-			// Check if it's an ERROR packet.
 			if packet.OpCode() == protocol.ERROR {
-				errorPacket, ok := packet.(protocol.Error)
-				if ok {
-					result <- fmt.Errorf("server error %d: %s", errorPacket.ErrorCode, errorPacket.ErrorMsg)
-				} else {
-					result <- errors.New("received error packet from server")
-				}
+				errorPacket, _ := packet.(protocol.Error)
+				result <- fmt.Errorf("server error %d: %s", errorPacket.ErrorCode, errorPacket.ErrorMsg)
 				return
 			}
 
 			if packet.OpCode() != protocol.ACK {
-				retries++
 				continue
 			}
 
 			ack, ok := packet.(protocol.Ack)
-			if !ok {
-				retries++
+			if !ok || ack.BlockNumber != blockNum {
 				continue
-			}
-
-			// Handle retry if the server didn't receive our last DATA/WRQ.
-			if ack.BlockNumber != expectedBlockNum {
-				if ack.BlockNumber == expectedBlockNum-1 {
-					var packetData []byte
-					if expectedBlockNum-1 == 0 {
-						packetData = prevWrq.ToBinary()
-					} else {
-						packetData = prevData.ToBinary()
-					}
-					conn.WriteToUDP(packetData, serverTIDAddr)
-				}
-				continue
-			}
-
-			if expectedBlockNum == 0 {
-				isFirstRequest = false
-			}
-
-			if serverTIDAddr == nil {
-				serverTIDAddr = addr
 			}
 
 			break
 		}
 
-		if retries >= maxRetries {
-			result <- fmt.Errorf("max retries reached for block %d", expectedBlockNum)
+		if n < TFTP_MAX_DATAGRAM_LENGTH || err == io.EOF {
+			fmt.Println("Transfer complete")
+			result <- nil
+			return
 		}
 
+		blockNum++
 		offset += int64(n)
-		expectedBlockNum += 1
-		if n < TFTP_MAX_DATAGRAM_LENGTH {
-			// Transfer complete.
-			break
-		}
 	}
-
-	fmt.Println("Transfer complete")
-
-	result <- nil
 }
 
 func get(ctx context.Context, result chan error, serverAddr string, requestingTID int, remotePath, localPath string) {
