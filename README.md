@@ -1,5 +1,5 @@
 # What
-This is a TFTP parser. This began as a simple project to explore parsing a binary protocol. TFTP is a straightforward protocol that I may make a client and server for in the future.
+This is a TFTP parser, client, and daemon. This began as a simple project to explore parsing a binary protocol.
 
 The parser is unit tested.
 
@@ -16,5 +16,27 @@ TFTP is typically implemented on top of UDP, with clients initially sending requ
 There are details to explore in the implementation of a client and server, including handling duplicate packets,
 retransmitting packets, timeouts when ACKs are missing, and determining correct error codes.
 
-# Intentions
-I'd like to build an actual client and server for this protocol.
+# How to Use
+## Dependencies
+```bash
+git clone git@github.com:zcroft27/tftp.git tftp
+cd tftp
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" # install homebrew if not already.
+brew install task # optional, enables use of Taskfile for manual testing.
+brew install go
+go mod tidy
+```
+## Operation
+```bash
+sudo task server > server.log 2>&1 & # sudo since binding to privileged port 69, & to run in the background. CAREFUL: sudo first time will ask for password, use `fg` to enter it. Or, just use a different shell for this.
+task generate-test-file # creates cmd/tftpd/tftp-root/test.txt with ~280 MiB of random ascii data.
+task get # will retrieve the generated data into test.txt.
+task put # will write the generated data into cmd/tftpd/tftp-root/written-to.txt.
+```
+
+## Cleanup
+```bash
+sudo lsof -i :69 # view the server process!
+fg # become the server process...
+ctrl+c # SIGINT
+```
